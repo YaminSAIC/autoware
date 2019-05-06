@@ -8,10 +8,20 @@
 //headers in local files
 #include "lidar_point_pillars/nms_cuda.h"
 
-// the paralled steps:
-// 1. copy memory
-// 2. calculate the iou
-// 3. mask out for each refence boxes
+/*
+the paralled steps:
+1. copy memory
+2. calculate the iou
+3. mask out for each refence boxes
+
+key points:
+1. the iou is calculated as same as tensorflow object detection: scores for every 2 boxes.
+2. the mask is represented by bits so that the results can be used directly by |
+3. all the masks are calculated in cpu, because you need to remove in one oder.
+4. preprocessing: sort by sore, is done in cpu.
+*/
+
+
 
 // single box iou
 __device__ inline float devIoU(float const *const a, float const *const b)
@@ -128,6 +138,7 @@ void NMSCuda::doNMSCuda(const int host_filter_count, float* dev_sorted_box_for_n
   GPU_CHECK(cudaMemcpy(&host_mask[0],dev_mask, sizeof(unsigned long long) * host_filter_count * col_blocks,cudaMemcpyDeviceToHost));
   std::vector<unsigned long long> remv(col_blocks);
   // initialize with 0
+  // final remv is recorded with blocks too.
   memset(&remv[0], 0, sizeof(unsigned long long) * col_blocks);
   
   // for each filter, or we say reference box
@@ -140,6 +151,7 @@ void NMSCuda::doNMSCuda(const int host_filter_count, float* dev_sorted_box_for_n
     if (!(remv[nblock] & (1ULL << inblock)))
     {
       out_keep_inds[out_num_to_keep++] = i;
+      // for one filter bit add masks for every blocks
       unsigned long long *p = &host_mask[0] + i * col_blocks;
       for (int j = nblock; j < col_blocks; j++)
       {
