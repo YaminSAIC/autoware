@@ -113,6 +113,7 @@ void NMSCuda::doNMSCuda(const int host_filter_count, float* dev_sorted_box_for_n
   unsigned long long *dev_mask = NULL;
   
   # why here dev_mask is for block not for thread?
+  # host_filter's result if represented with blocks of boxes instead of single boxes
   GPU_CHECK(cudaMalloc(&dev_mask, host_filter_count * col_blocks * sizeof(unsigned long long)));
 
   nms_kernel<<<blocks, threads>>>(host_filter_count, nms_overlap_threshold_, dev_sorted_box_for_nms, dev_mask, NUM_BOX_CORNERS_);
