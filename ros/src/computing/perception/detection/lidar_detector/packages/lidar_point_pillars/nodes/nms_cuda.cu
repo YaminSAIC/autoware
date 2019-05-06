@@ -8,7 +8,7 @@
 //headers in local files
 #include "lidar_point_pillars/nms_cuda.h"
 
-
+# single box iou
 __device__ inline float devIoU(float const *const a, float const *const b)
 {
   float left = max(a[0], b[0]), right = min(a[2], b[2]);
@@ -20,32 +20,46 @@ __device__ inline float devIoU(float const *const a, float const *const b)
   return interS / (Sa + Sb - interS);
 }
 
+
+# dev_boxes are sorted for nms beforehand
+
 __global__ void nms_kernel(const int n_boxes, const float nms_overlap_thresh,
                            const float *dev_boxes, unsigned long long *dev_mask,
                            const int NUM_BOX_CORNERS)
 {
   const int row_start = blockIdx.y;
   const int col_start = blockIdx.x;
-
+  
+  # blockDim is nothing to do with blockIdx
+  # it is the threads
   const int block_threads = blockDim.x;
-
+  
+  # when enough boxes, row_size and col_size both are block_threads
+  # row_size and col_size are for one block
   const int row_size =
       min(n_boxes - row_start * block_threads, block_threads);
   const int col_size =
       min(n_boxes - col_start * block_threads, block_threads);
-
+  
+  # copy memory from global to shared memory!!
   __shared__ float block_boxes[NUM_THREADS_MACRO * NUM_2D_BOX_CORNERS_MACRO];
   if (threadIdx.x < col_size)
   {
+    # 0 1 2 3 4 is the corners of the box, so the box is a 4 corner-box
+    # block boxes is shared memory for a block. shared memory is shared by block
+    # Each thread is for copying one box 
+    # left: thread position in a block                           right: global position of the thread
     block_boxes[threadIdx.x * NUM_BOX_CORNERS + 0] = dev_boxes[(block_threads * col_start + threadIdx.x) * NUM_BOX_CORNERS + 0];
     block_boxes[threadIdx.x * NUM_BOX_CORNERS + 1] = dev_boxes[(block_threads * col_start + threadIdx.x) * NUM_BOX_CORNERS + 1];
     block_boxes[threadIdx.x * NUM_BOX_CORNERS + 2] = dev_boxes[(block_threads * col_start + threadIdx.x) * NUM_BOX_CORNERS + 2];
     block_boxes[threadIdx.x * NUM_BOX_CORNERS + 3] = dev_boxes[(block_threads * col_start + threadIdx.x) * NUM_BOX_CORNERS + 3];
   }
   __syncthreads();
-
+  
+  # this if is for last block which has more threads than the boxes.
   if (threadIdx.x < row_size)
   {
+    # row is for sorted dev box index, so no need to consider col
     const int cur_box_idx = block_threads * row_start + threadIdx.x;
     const float cur_box[NUM_2D_BOX_CORNERS_MACRO] = {dev_boxes[cur_box_idx*NUM_BOX_CORNERS + 0],
                                                      dev_boxes[cur_box_idx*NUM_BOX_CORNERS + 1],
@@ -57,14 +71,23 @@ __global__ void nms_kernel(const int n_boxes, const float nms_overlap_thresh,
     {
       start = threadIdx.x + 1;
     }
+    
+    
     for (int i = start; i < col_size; i++)
-    {
+    { 
+      # iou for nms.. 
+      #          current    threadbox in blockboxes
+      # cur_box is the sorted box by confidence
       if (devIoU(cur_box, block_boxes + i * NUM_BOX_CORNERS) > nms_overlap_thresh)
       {
+        #  00000000100000000  1 is for the boxes overlaps too much
         t |= 1ULL << i;
       }
     }
+    
+    # from here we know col_blocks have every boxes
     const int col_blocks = DIVUP(n_boxes, block_threads);
+    # col is for all the compared boxes, why no thread??
     dev_mask[cur_box_idx * col_blocks + col_start] = t;
   }
 }
@@ -83,6 +106,8 @@ void NMSCuda::doNMSCuda(const int host_filter_count, float* dev_sorted_box_for_n
   dim3 threads(NUM_THREADS_);
 
   unsigned long long *dev_mask = NULL;
+  
+  # why here dev_mask is for block not for thread?
   GPU_CHECK(cudaMalloc(&dev_mask, host_filter_count * col_blocks * sizeof(unsigned long long)));
 
   nms_kernel<<<blocks, threads>>>(host_filter_count, nms_overlap_threshold_, dev_sorted_box_for_nms, dev_mask, NUM_BOX_CORNERS_);
