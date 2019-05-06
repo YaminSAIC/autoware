@@ -42,6 +42,9 @@ __global__ void nms_kernel(const int n_boxes, const float nms_overlap_thresh,
       min(n_boxes - col_start * block_threads, block_threads);
   
   # copy memory from global to shared memory!!
+  # every thread in a block is for a 2d box's corners
+  # from now you need to pay attention to the reflection of block to the real pos
+  # and only think in one block
   __shared__ float block_boxes[NUM_THREADS_MACRO * NUM_2D_BOX_CORNERS_MACRO];
   if (threadIdx.x < col_size)
   {
@@ -72,7 +75,7 @@ __global__ void nms_kernel(const int n_boxes, const float nms_overlap_thresh,
       start = threadIdx.x + 1;
     }
     
-    
+    # col_size=blockdim=thread_num_in_one_block
     for (int i = start; i < col_size; i++)
     { 
       # iou for nms.. 
@@ -116,8 +119,10 @@ void NMSCuda::doNMSCuda(const int host_filter_count, float* dev_sorted_box_for_n
   std::vector<unsigned long long> host_mask(host_filter_count * col_blocks);
   GPU_CHECK(cudaMemcpy(&host_mask[0],dev_mask, sizeof(unsigned long long) * host_filter_count * col_blocks,cudaMemcpyDeviceToHost));
   std::vector<unsigned long long> remv(col_blocks);
+  // initialize with 0
   memset(&remv[0], 0, sizeof(unsigned long long) * col_blocks);
-
+  
+  # for each filter, or we say reference box
   for (int i = 0; i < host_filter_count; i++)
   {
     int nblock = i /  NUM_THREADS_;
