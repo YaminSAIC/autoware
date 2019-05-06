@@ -76,6 +76,8 @@ __global__ void nms_kernel(const int n_boxes, const float nms_overlap_thresh,
     }
     
     # col_size=blockdim=thread_num_in_one_block
+    # why block-wise not thread-wise here?
+    # because now it is mapping to row, col should be reduced!!!!!!!!!!!!!!
     for (int i = start; i < col_size; i++)
     { 
       # iou for nms.. 
