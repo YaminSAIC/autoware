@@ -43,7 +43,7 @@
 #include "lidar_point_pillars/preprocess_points_cuda.h"
 #include "lidar_point_pillars/anchor_mask_cuda.h"
 #include "lidar_point_pillars/scatter_cuda.h"
-#include "lidar_point_pillars/postprocess_cuda.h"
+#include "lidar_point_pillars/postprocess_cuda.h"  // nms in gpu, select in cpu
 
 // Logger for TensorRT info/warning/errors
 class Logger : public nvinfer1::ILogger
