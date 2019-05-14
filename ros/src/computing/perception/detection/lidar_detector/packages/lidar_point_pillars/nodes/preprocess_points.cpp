@@ -46,6 +46,8 @@ void PreprocessPoints::initializeVariables(int* coor_to_pillaridx, float* sparse
                                            float* pillar_y, float* pillar_z, float* pillar_i,
                                            float* x_coors_for_sub_shaped, float* y_coors_for_sub_shaped)
 {
+  // 初始化feature map都是-1, coor_to_pillaridx 就是featuremap, 意识上[GRID_Y_SIZE_，GRID_X_SIZE_]然后向量化。
+  // 里面存储着对应的pillar idx
   for (int i = 0; i < GRID_Y_SIZE_; i++)
   {
     for (int j = 0; j < GRID_X_SIZE_; j++)
@@ -53,7 +55,8 @@ void PreprocessPoints::initializeVariables(int* coor_to_pillaridx, float* sparse
       coor_to_pillaridx[i * GRID_X_SIZE_ + j] = -1;
     }
   }
-
+  
+  // sparse_pillar_map [NUM_INDS_FOR_SCAN_, NUM_INDS_FOR_SCAN_] 然后向量化
   for (int i = 0; i < NUM_INDS_FOR_SCAN_; i++)
   {
     for (int j = 0; j < NUM_INDS_FOR_SCAN_; j++)
@@ -61,7 +64,8 @@ void PreprocessPoints::initializeVariables(int* coor_to_pillaridx, float* sparse
       sparse_pillar_map[i * NUM_INDS_FOR_SCAN_ + j] = 0;
     }
   }
-
+  
+  // pillars里面每一个点的表示在这里。
   for (int i = 0; i < MAX_NUM_PILLARS_ * MAX_NUM_POINTS_PER_PILLAR_; i++)
   {
     pillar_x[i] = 0;
@@ -81,15 +85,17 @@ void PreprocessPoints::preprocess(const float* in_points_array, int in_num_point
   int pillar_count = 0;
   float x_coors_for_sub[MAX_NUM_PILLARS_] = { 0 };
   float y_coors_for_sub[MAX_NUM_PILLARS_] = { 0 };
-  // init variables
+  // init variables 归零归负一
   int coor_to_pillaridx[GRID_Y_SIZE_ * GRID_X_SIZE_];
   initializeVariables(coor_to_pillaridx, sparse_pillar_map, pillar_x, pillar_y, pillar_z, pillar_i,
                       x_coors_for_sub_shaped, y_coors_for_sub_shaped);
   for (int i = 0; i < in_num_points; i++)
-  {
+  { 
+    // 给每一个点找他对应的格子，这一步可以并行处理
     int x_coor = std::floor((in_points_array[i * NUM_BOX_CORNERS_ + 0] - MIN_X_RANGE_) / PILLAR_X_SIZE_);
     int y_coor = std::floor((in_points_array[i * NUM_BOX_CORNERS_ + 1] - MIN_Y_RANGE_) / PILLAR_Y_SIZE_);
     int z_coor = std::floor((in_points_array[i * NUM_BOX_CORNERS_ + 2] - MIN_Z_RANGE_) / PILLAR_Z_SIZE_);
+    // filter 出界的点
     if (x_coor < 0 || x_coor >= GRID_X_SIZE_ || y_coor < 0 || y_coor >= GRID_Y_SIZE_ || z_coor < 0 ||
         z_coor >= GRID_Z_SIZE_)
     {
